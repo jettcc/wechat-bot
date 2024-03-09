@@ -1,14 +1,21 @@
 // import { getChatGPTReply as getReply } from '../chatgpt/index.js'
 import { getOpenAiReply as getReply } from '../openai/index.js'
-import { botName, roomWhiteList, aliasWhiteList } from '../../config.js'
-
+import redis from './redisClient.js';
+import dotenv from 'dotenv'
 /**
  * 默认消息发送
  * @param msg
  * @param bot
  * @returns {Promise<void>}
  */
+const env = dotenv.config().parsed // 环境参数
+const botName = env.BOT_NAME
 export async function defaultMessage(msg, bot) {
+  const aliasWhiteList = await redis.smembers("contact") // 在 redis 里拿到联系人的白名单
+  const roomWhiteList = await redis.smembers("room") // 在 redis 中拿到 room 的白名单
+  console.log("contact white: %s", aliasWhiteList)
+  console.log("room white: %s", roomWhiteList)
+  
   const contact = msg.talker() // 发消息人
   const receiver = msg.to() // 消息接收人
   const content = msg.text() // 消息内容
@@ -21,15 +28,19 @@ export async function defaultMessage(msg, bot) {
   const isRoom = roomWhiteList.includes(roomName) && content.includes(`${botName}`) // 是否在群聊白名单内并且艾特了机器人
   const isAlias = aliasWhiteList.includes(remarkName) || aliasWhiteList.includes(name) // 发消息的人是否在联系人白名单内
   const isBotSelf = botName === remarkName || botName === name // 是否是机器人自己
-  // TODO 你们可以根据自己的需求修改这里的逻辑
+  // TODO 可以根据自己的需求修改这里的逻辑
   if (isText && !isBotSelf) {
     console.log(JSON.stringify(msg))
-    if ((Date.now() - 1e3 * msg.payload.timestamp) > 3000) return 
-    if (!content.startsWith('? ') && !content.startsWith('？ ') && !content.startsWith('> ')) return 
+    if ((Date.now() - 1e3 * msg.payload.timestamp) > 3000) return
+    // if (!content.startsWith('? ') && !content.startsWith('？ ') && !content.startsWith('> ')) return 
     try {
-      const trimed = content.substr(2)
-      if (trimed.length < 5) return 
-      
+      const trimed = content
+      console.log("log(1) [%s] send message: %s\n", contact, trimed)
+      if (room) {
+        console.log("\troom msg:%s, senders", room, alias)
+      }
+      if (trimed.length < 2) return
+
       // 区分群聊和私聊
       if (isRoom && room) {
         await room.say(await getReply(trimed.replace(`${botName}`, '')))
